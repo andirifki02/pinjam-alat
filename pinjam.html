@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AGRI-LOAN | Sistem Sinkron</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <style>
+        :root { --muted-green: #5b705b; --warm-grey: #dfdfdf; --soft-white: #ededed; }
+        body { background-color: var(--warm-grey); font-family: 'Inter', sans-serif; color: #333; }
+        .navbar { background: var(--muted-green) !important; padding: 12px 0; }
+        .card-barang { border: none; border-radius: 20px; background: var(--soft-white); box-shadow: 8px 8px 16px #cbcbcb; margin-bottom: 20px; }
+        .img-wrapper { position: relative; padding: 10px; }
+        .foto-utama { width: 100%; height: 180px; object-fit: cover; border-radius: 15px; }
+        .stock-tag { position: absolute; top: 20px; left: 20px; background: white; padding: 4px 12px; border-radius: 8px; font-weight: 800; font-size: 0.75rem; border: 1px solid var(--muted-green); z-index: 5; }
+        .peminjam-card { background: white; border-radius: 12px; padding: 10px; margin-bottom: 8px; border-left: 4px solid var(--muted-green); font-size: 0.75rem; }
+        .img-log { width: 100%; height: 75px; object-fit: cover; border-radius: 6px; border: 1px solid #eee; }
+        .btn-action { border-radius: 12px; font-weight: 700; font-size: 0.8rem; padding: 12px; border: none; width: 100%; }
+        .btn-pinjam { background: var(--muted-green); color: white; }
+        .btn-kembali { background: #6c757d; color: white; }
+    </style>
+</head>
+<body>
+
+<div id="authArea">
+    <div id="rolePage" class="container vh-100 d-flex align-items-center justify-content-center text-center">
+        <div class="bg-white p-5 rounded-5 shadow-lg" style="max-width: 400px; width:100%;">
+            <h2 class="fw-bold mb-4" style="color: var(--muted-green);">AGRI-LOAN</h2>
+            <button onclick="entry('User')" class="btn btn-action btn-pinjam py-3 mb-3">MULAI PINJAM</button>
+            <button onclick="showAdmin()" class="btn btn-link text-muted">Akses Admin</button>
+        </div>
+    </div>
+</div>
+
+<div id="appInterface" style="display:none;">
+    <nav class="navbar navbar-dark sticky-top mb-4 shadow-sm">
+        <div class="container d-flex justify-content-between align-items-center">
+            <span class="navbar-brand fw-bold">AGRI-LOAN</span>
+            <button onclick="location.reload()" class="btn btn-outline-light btn-sm rounded-pill px-3">Keluar</button>
+        </div>
+    </nav>
+
+    <div class="container pb-5">
+        <div id="adminPanel" class="p-4 mb-4 d-none bg-white rounded-4 shadow-sm">
+            <h6 class="fw-bold mb-3">Input Alat Baru</h6>
+            <div class="row g-2">
+                <div class="col-md-4"><input type="text" id="nInp" class="form-control" placeholder="Nama Alat"></div>
+                <div class="col-md-2"><input type="number" id="sInp" class="form-control" placeholder="Stok"></div>
+                <div class="col-md-4"><input type="file" id="fInp" class="form-control" accept="image/*"></div>
+                <div class="col-md-2"><button onclick="addDB()" class="btn btn-pinjam w-100 h-100">SIMPAN</button></div>
+            </div>
+        </div>
+
+        <div class="row g-4" id="renderArea"></div>
+    </div>
+</div>
+
+<input type="file" id="camInput" accept="image/*" capture="environment" style="display: none;">
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyC-5O3AXJhbQXAXhSEAEyTPQP6Xrk1gOIU",
+        authDomain: "agri-loan-381ff.firebaseapp.com",
+        databaseURL: "https://agri-loan-381ff-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId: "agri-loan-381ff",
+        storageBucket: "agri-loan-381ff.firebasestorage.app",
+        messagingSenderId: "73580767492",
+        appId: "1:73580767492:web:4f1f0da7e7d05a927b0851"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    let myRole = "";
+
+    function showAdmin() { if(prompt("Pass:") === "admin123") entry('Admin'); }
+
+    function entry(role) {
+        myRole = role;
+        document.getElementById('authArea').style.display = 'none';
+        document.getElementById('appInterface').style.display = 'block';
+        if(role === 'Admin') document.getElementById('adminPanel').classList.remove('d-none');
+        
+        // MENGGUNAKAN NODE inventaris_multi SESUAI DATABASE KAMU
+        db.ref('inventaris_multi').on('value', (s) => {
+            const container = document.getElementById('renderArea'); container.innerHTML = "";
+            const data = s.val(); if(!data) return;
+
+            Object.values(data).reverse().forEach(item => {
+                const logs = item.peminjam_aktif ? Object.entries(item.peminjam_aktif) : [];
+                // Memastikan variabel stok menggunakan key yang tepat dari DB kamu
+                const tersedia = item.stok_tersedia !== undefined ? item.stok_tersedia : item.total_stok;
+
+                container.innerHTML += `
+                <div class="col-md-6 col-lg-4">
+                    <div class="card card-barang h-100 p-2">
+                        <div class="img-wrapper">
+                            <div class="stock-tag">TERSEDIA: ${tersedia} / ${item.total_stok}</div>
+                            <img src="${item.foto}" class="foto-utama mb-2">
+                        </div>
+                        <div class="card-body pt-0">
+                            <h5 class="fw-bold mb-3 text-center text-uppercase">${item.nama}</h5>
+                            <div class="mb-3" style="max-height:220px; overflow-y:auto; border-top:1px solid #ddd; padding-top:10px;">
+                                ${logs.map(([key, val]) => `
+                                    <div class="peminjam-card shadow-sm">
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <b>${val.nama} (${val.jumlah} Unit)</b>
+                                            <small style="font-size:0.6rem; color:#999">${val.waktu || ''}</small>
+                                        </div>
+                                        <div class="row g-1">
+                                            <div class="col-6">
+                                                <img src="${val.foto_p || 'https://via.placeholder.com/100'}" class="img-log">
+                                                <small class="d-block text-muted" style="font-size:0.6rem;">In: ${val.desc_p || '-'}</small>
+                                            </div>
+                                            <div class="col-6 text-end">
+                                                ${val.foto_k ? `<img src="${val.foto_k}" class="img-log"><small class="d-block text-muted" style="font-size:0.6rem;">Out: ${val.desc_k}</small>` : '<div class="h-100 d-flex align-items-center justify-content-center bg-light rounded text-muted" style="font-size:0.6rem; min-height:75px;">Dipakai</div>'}
+                                            </div>
+                                        </div>
+                                    </div>`).join('')}
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-6"><button onclick="mulaiProses('${item.id}', 'pinjam')" class="btn btn-action btn-pinjam" ${tersedia <= 0 ? 'disabled' : ''}>PINJAM</button></div>
+                                <div class="col-6"><button onclick="mulaiProses('${item.id}', 'kembali')" class="btn btn-action btn-kembali">KEMBALI</button></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            });
+        });
+    }
+
+    function mulaiProses(id, tipe) {
+        db.ref('inventaris_multi/'+id).once('value', (snap) => {
+            const data = snap.val();
+            const cam = document.getElementById('camInput');
+            const stokSkrg = data.stok_tersedia !== undefined ? data.stok_tersedia : data.total_stok;
+
+            if(tipe === 'pinjam') {
+                const nama = prompt("Nama Peminjam:"); if(!nama) return;
+                const jml = parseInt(prompt("Jumlah Unit (Tersedia: "+stokSkrg+"):"));
+                if(isNaN(jml) || jml > stokSkrg || jml <= 0) return alert("Jumlah tidak valid!");
+                const desc = prompt("Catatan Kondisi (Pinjam):");
+
+                alert("Klik OK untuk membuka Kamera (Pinjam)");
+                cam.onchange = (e) => {
+                    const r = new FileReader(); r.onloadend = () => {
+                        const logId = Date.now();
+                        const updateData = {};
+                        updateData['inventaris_multi/'+id+'/peminjam_aktif/'+logId] = {
+                            id: logId, nama, jumlah: jml, desc_p: desc, foto_p: r.result, waktu: new Date().toLocaleString('id-ID')
+                        };
+                        updateData['inventaris_multi/'+id+'/stok_tersedia'] = stokSkrg - jml;
+                        
+                        db.ref().update(updateData).then(() => alert("Berhasil! Stok Berkurang."));
+                    }; r.readAsDataURL(e.target.files[0]);
+                };
+                cam.click();
+
+            } else {
+                const aktif = Object.entries(data.peminjam_aktif || {}).filter(([k,v]) => !v.foto_k);
+                if(aktif.length === 0) return alert("Tidak ada unit dipinjam.");
+                
+                const targetNama = prompt("Ketik Nama Pengembali:\n" + aktif.map(([k,v]) => `- ${v.nama}`).join("\n"));
+                const target = aktif.find(([k,v]) => v.nama.toLowerCase() === targetNama.toLowerCase());
+                if(!target) return alert("Nama salah!");
+                
+                const desc = prompt("Catatan Kondisi (Kembali):");
+                alert("Klik OK untuk membuka Kamera (Kembali)");
+                cam.onchange = (e) => {
+                    const r = new FileReader(); r.onloadend = () => {
+                        const updateData = {};
+                        updateData['inventaris_multi/'+id+'/peminjam_aktif/'+target[0]+'/foto_k'] = r.result;
+                        updateData['inventaris_multi/'+id+'/peminjam_aktif/'+target[0]+'/desc_k'] = desc;
+                        updateData['inventaris_multi/'+id+'/stok_tersedia'] = stokSkrg + target[1].jumlah;
+                        
+                        db.ref().update(updateData).then(() => alert("Berhasil! Stok Bertambah."));
+                    }; r.readAsDataURL(e.target.files[0]);
+                };
+                cam.click();
+            }
+        });
+    }
+
+    // Fungsi Admin untuk Tambah Barang Baru
+    function addDB() {
+        const n = document.getElementById('nInp').value; const s = document.getElementById('sInp').value; const f = document.getElementById('fInp').files[0];
+        if(!n || !s || !f) return alert("Lengkapi data!");
+        const r = new FileReader(); r.onloadend = () => {
+            const id = Date.now(); 
+            db.ref('inventaris_multi/'+id).set({ id, nama:n, total_stok:parseInt(s), stok_tersedia:parseInt(s), foto:r.result });
+            alert("Barang berhasil ditambah!");
+        }; r.readAsDataURL(f);
+    }
+</script>
+</body>
+</html>
